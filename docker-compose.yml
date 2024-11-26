@@ -1,0 +1,70 @@
+x-memgraph-common:
+  &memgraph-common
+  image: memgraph/memgraph-mage:1.21-memgraph-2.21
+  command: ["memgraph", "--data-recovery-on-startup=true"]
+  healthcheck:
+    test: [ "CMD-SHELL", "echo 'RETURN 0;' | mgconsole || exit 1" ]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 0s
+
+services:
+  memgraph-master:
+    <<: *memgraph-common
+    container_name: memgraph-master
+    ports:
+      - "7689:7687"
+      - "7476:7474"
+    volumes:
+      - memgraph-master-data:/var/lib/memgraph
+
+  memgraph-replica-1:
+    <<: *memgraph-common
+    container_name: memgraph-replica-1
+    ports:
+      - "7690:7687"
+    volumes:
+      - memgraph-replica-1-data:/var/lib/memgraph
+    depends_on:
+      - memgraph-master
+
+  memgraph-replica-2:
+    <<: *memgraph-common
+    container_name: memgraph-replica-2
+    ports:
+      - "7691:7687"
+    volumes:
+      - memgraph-replica-2-data:/var/lib/memgraph
+    depends_on:
+      - memgraph-master
+
+  memgraph-lab:
+    image: memgraph/lab:2.18.2
+    container_name: memgraph-lab
+    environment:
+      - QUICK_CONNECT_MG_HOST=host.docker.internal
+    ports:
+      - "3001:3000"
+    volumes:
+      - memgraph-lab-data:/var/lib/memgraph
+    depends_on:
+      - memgraph-master
+      - memgraph-replica-1
+      - memgraph-replica-2
+
+  haproxy:
+    image: haproxy:3.0.6-alpine
+    restart: always
+    ports:
+      - "7692:7692"  # write
+      - "7693:7693"  # read
+      - "8404:8404"  # HAProxy stats
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+
+volumes:
+  memgraph-master-data:
+  memgraph-replica-1-data:
+  memgraph-replica-2-data:
+  memgraph-lab-data:
